@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Game Hub</title>
+
+<style>
+:root { --primary:#38bdf8; --bg:#0f172a; --panel:#1e293b; --success:#22c55e; }
+
+body {
+    font-family:'Segoe UI';
+    background:var(--bg);
+    color:white;
+    text-align:center;
+    margin:0;
+}
+
+.header {
+    padding:20px;
+    background:var(--panel);
+    display:flex;
+    justify-content:space-around;
+}
+
+.card {
+    background:var(--panel);
+    padding:20px;
+    border-radius:12px;
+    margin:20px auto;
+    width:300px;
+}
+
+input {
+    padding:10px;
+    margin:10px;
+    width:80%;
+    border-radius:8px;
+    border:none;
+}
+
+button {
+    padding:10px 20px;
+    background:var(--primary);
+    border:none;
+    border-radius:8px;
+    cursor:pointer;
+}
+
+.level {
+    background:#1e293b;
+    padding:15px;
+    margin:10px;
+    border-radius:10px;
+    cursor:pointer;
+}
+.locked { opacity:0.3; }
+</style>
+</head>
+
+<body>
+
+<!-- LOGIN -->
+<div id="loginBox" class="card">
+    <h2>Login</h2>
+    <input id="email" placeholder="Email"><br>
+    <input id="pass" type="password" placeholder="Password"><br>
+    <button onclick="login()">Login</button>
+    <button onclick="register()">Register</button>
+</div>
+
+<!-- APP -->
+<div id="app" style="display:none;">
+    <div class="header">
+        <div>User: <span id="user"></span></div>
+        <div>Credits: <span id="credits">0</span></div>
+        <button onclick="logout()">Logout</button>
+    </div>
+
+    <!-- VOUCHER -->
+    <div class="card">
+        <input id="code" placeholder="Enter Voucher">
+        <button onclick="redeem()">Redeem</button>
+    </div>
+
+    <!-- GAME LIST -->
+    <div id="games"></div>
+</div>
+
+<script type="module">
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+import { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-auth.js";
+import { getFirestore, doc, getDoc, setDoc, updateDoc, deleteDoc } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+// 🔥 YOUR REAL CONFIG
+const firebaseConfig = {
+    apiKey: "AIzaSyA1fwmPPjNGBw0gGYv6TSWmuZ41aNelzNc",
+    authDomain: "technoprenuership-4f49d.firebaseapp.com",
+    projectId: "technoprenuership-4f49d",
+    storageBucket: "technoprenuership-4f49d.firebasestorage.app",
+    messagingSenderId: "679400264773",
+    appId: "1:679400264773:web:f27707019e8bf8e9843f2c"
+};
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+
+// 🎮 GAME LIST
+const games = [
+    { id:1, name:"1024 Game", file:"1024minigame.html", cost:10, min:500 },
+    { id:2, name:"Game 2", file:"game2.html", cost:20, min:100 }
+];
+
+// 🔐 LOGIN
+window.login = () => {
+    const e = document.getElementById("email").value;
+    const p = document.getElementById("pass").value;
+
+    signInWithEmailAndPassword(auth,e,p)
+        .catch(err => alert(err.message));
+};
+
+window.register = () => {
+    const e = document.getElementById("email").value;
+    const p = document.getElementById("pass").value;
+
+    createUserWithEmailAndPassword(auth,e,p)
+        .catch(err => alert(err.message));
+};
+
+window.logout = () => signOut(auth);
+
+// 🔄 USER STATE
+onAuthStateChanged(auth, async (user) => {
+    if(user){
+        document.getElementById("loginBox").style.display = "none";
+        document.getElementById("app").style.display = "block";
+
+        document.getElementById("user").innerText = user.email;
+
+        const ref = doc(db,"users",user.uid);
+        const snap = await getDoc(ref);
+
+        let data;
+        if(!snap.exists()){
+            data = { credits:100, unlockedLevel:1, scores:{} };
+            await setDoc(ref,data);
+        } else {
+            data = snap.data();
+        }
+
+        document.getElementById("credits").innerText = data.credits;
+        renderGames(data);
+
+    } else {
+        document.getElementById("loginBox").style.display = "block";
+        document.getElementById("app").style.display = "none";
+    }
+});
+
+// 🎟️ REDEEM (your original working version)
+window.redeem = async () => {
+    const code = document.getElementById("code").value;
+
+    const coupRef = doc(db,"coupons",code);
+    const snap = await getDoc(coupRef);
+
+    if(!snap.exists()){
+        alert("Invalid Code");
+        return;
+    }
+
+    const amount = snap.data().amount;
+
+    const userRef = doc(db,"users",auth.currentUser.uid);
+    const userSnap = await getDoc(userRef);
+
+    await updateDoc(userRef,{
+        credits: userSnap.data().credits + amount
+    });
+
+    await deleteDoc(coupRef);
+
+    alert("Success!");
+    location.reload();
+};
+
+// 🎮 RENDER GAME
+function renderGames(data){
+    const container = document.getElementById("games");
+    container.innerHTML = "";
+
+    games.forEach(g => {
+        const locked = g.id > data.unlockedLevel;
+
+        const div = document.createElement("div");
+        div.className = "level " + (locked ? "locked" : "");
+        div.innerHTML = `
+            <h3>${g.name}</h3>
+            <p>${locked ? "Locked" : "Play"}</p>
+        `;
+
+        if(!locked){
+            div.onclick = async () => {
+                if(data.credits < g.cost){
+                    alert("Not enough credits");
+                    return;
+                }
+
+                const userRef = doc(db,"users",auth.currentUser.uid);
+                await updateDoc(userRef,{
+                    credits: data.credits - g.cost
+                });
+
+                window.location.href =
+                    `${g.file}?uid=${auth.currentUser.uid}&id=${g.id}&min=${g.min}`;
+            };
+        }
+
+        container.appendChild(div);
+    });
+}
+</script>
+
+</body>
+</html>

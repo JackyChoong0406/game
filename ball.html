@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Brick Breaker: Infinite Descent</title>
+    <style>
+        body { margin: 0; background: #020617; display: flex; justify-content: center; align-items: center; height: 100vh; overflow: hidden; font-family: 'Segoe UI', sans-serif; }
+        canvas { border: 2px solid #1e293b; background: #020617; box-shadow: 0 0 40px rgba(0,0,0,1); cursor: none; }
+    </style>
+</head>
+<body>
+
+<canvas id="gameCanvas" width="600" height="750"></canvas>
+
+<script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+
+    // Game State
+    let score = 0;
+    let secondsElapsed = 0;
+    let gameOver = false;
+    let brickYOffset = 60;
+    let lastDropTime = 0;
+    let waveCount = 1;
+
+    // Ball Logic
+    let balls = [{ x: 300, y: 600, radius: 7, speed: 6, dx: 4, dy: -4 }];
+
+    // Paddle Logic
+    const paddle = {
+        width: 110, height: 12,
+        x: 245, baseWidth: 110,
+        color: '#f8fafc', timer: null
+    };
+
+    // Power-Up Logic
+    let powerUps = [];
+    const buffTypes = {
+        'SPLIT': { color: '#22d3ee', label: 'S' },
+        'LARGE': { color: '#e879f9', label: 'L' }
+    };
+
+    // Brick Layout
+    const rows = 6, cols = 8, bW = 65, bH = 22, bPad = 6, offL = 20;
+    const colors = ['#f43f5e', '#fb923c', '#fbbf24', '#4ade80', '#2dd4bf', '#3b82f6'];
+    let bricks = [];
+
+    function initBricks() {
+        bricks = [];
+        for (let c = 0; c < cols; c++) {
+            bricks[c] = [];
+            for (let r = 0; r < rows; r++) {
+                bricks[c][r] = { x: 0, y: 0, status: 1, color: colors[r % colors.length] };
+            }
+        }
+    }
+
+    document.addEventListener("mousemove", (e) => {
+        const rect = canvas.getBoundingClientRect();
+        paddle.x = (e.clientX - rect.left) - paddle.width / 2;
+    });
+
+    function applyBuff(type) {
+        if (type === 'SPLIT') {
+            const b = balls[0] || {x: 300, y: 400, dx: 4, dy: -4, radius: 7, speed: 6};
+            balls.push({ ...b, dx: -b.dx, dy: -Math.abs(b.dy) });
+            balls.push({ ...b, dx: b.dx * 0.5, dy: -Math.abs(b.dy) });
+        } else if (type === 'LARGE') {
+            paddle.width = 180;
+            clearTimeout(paddle.timer);
+            paddle.timer = setTimeout(() => { paddle.width = paddle.baseWidth; }, 8000);
+        }
+    }
+
+    function checkBoardCleared() {
+        let activeBricks = 0;
+        bricks.forEach(col => col.forEach(b => { if(b.status === 1) activeBricks++; }));
+        
+        if (activeBricks === 0) {
+            waveCount++;
+            brickYOffset = 60; // Reset height
+            initBricks();
+            // Speed up balls for the next wave
+            balls.forEach(b => {
+                b.speed += 0.5;
+                b.dx = (b.dx > 0 ? 1 : -1) * b.speed;
+                b.dy = (b.dy > 0 ? 1 : -1) * b.speed;
+            });
+        }
+    }
+
+    function update(time) {
+        if (gameOver) return;
+
+        secondsElapsed = Math.floor(time / 1000);
+        
+        // Bricks drop every 10 seconds
+        if (secondsElapsed % 10 === 0 && secondsElapsed !== lastDropTime) {
+            brickYOffset += 25;
+            lastDropTime = secondsElapsed;
+        }
+
+        balls.forEach((b, i) => {
+            b.x += b.dx; b.y += b.dy;
+            if (b.x + b.radius > canvas.width || b.x - b.radius < 0) b.dx *= -1;
+            if (b.y - b.radius < 0) b.dy *= -1;
+
+            if (b.y + b.radius > canvas.height - 40 && b.x > paddle.x && b.x < paddle.x + paddle.width) {
+                let hitPos = (b.x - (paddle.x + paddle.width/2)) / (paddle.width/2);
+                b.dx = hitPos * b.speed;
+                b.dy = -Math.abs(b.speed);
+                b.y = canvas.height - 40 - b.radius;
+            }
+            if (b.y > canvas.height) balls.splice(i, 1);
+        });
+
+        if (balls.length === 0) gameOver = true;
+
+        powerUps.forEach((p, i) => {
+            p.y += 3;
+            if (p.y + 10 > canvas.height - 40 && p.x > paddle.x && p.x < paddle.x + paddle.width) {
+                applyBuff(p.type);
+                powerUps.splice(i, 1);
+            }
+            if (p.y > canvas.height) powerUps.splice(i, 1);
+        });
+
+        bricks.forEach((col, c) => col.forEach((b, r) => {
+            if (b.status === 1) {
+                const bx = c * (bW + bPad) + offL;
+                const by = r * (bH + bPad) + brickYOffset;
+                b.x = bx; b.y = by;
+
+                if (by + bH > canvas.height - 50) gameOver = true;
+
+                balls.forEach(ball => {
+                    if (ball.x > bx && ball.x < bx + bW && ball.y > by && ball.y < by + bH) {
+                        ball.dy *= -1;
+                        b.status = 0;
+                        score += 20;
+                        if (Math.random() < 0.20) {
+                            const keys = Object.keys(buffTypes);
+                            const type = keys[Math.floor(Math.random() * keys.length)];
+                            powerUps.push({ x: bx + bW/2, y: by, type: type, ...buffTypes[type] });
+                        }
+                    }
+                });
+            }
+        }));
+
+        checkBoardCleared();
+    }
+
+    function draw() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        bricks.forEach(col => col.forEach(b => {
+            if (b.status === 1) {
+                ctx.fillStyle = b.color;
+                ctx.fillRect(b.x, b.y, bW, bH);
+                ctx.strokeStyle = 'rgba(255,255,255,0.1)';
+                ctx.strokeRect(b.x, b.y, bW, bH);
+            }
+        }));
+
+        ctx.fillStyle = paddle.color;
+        ctx.shadowBlur = 10; ctx.shadowColor = paddle.color;
+        ctx.fillRect(paddle.x, canvas.height - 40, paddle.width, paddle.height);
+        ctx.shadowBlur = 0;
+
+        balls.forEach(b => {
+            ctx.beginPath();
+            ctx.arc(b.x, b.y, b.radius, 0, Math.PI * 2);
+            ctx.fillStyle = "#fff";
+            ctx.fill();
+        });
+
+        powerUps.forEach(p => {
+            ctx.beginPath();
+            ctx.arc(p.x, p.y, 12, 0, Math.PI * 2);
+            ctx.fillStyle = p.color;
+            ctx.fill();
+            ctx.strokeStyle = "#fff";
+            ctx.lineWidth = 2;
+            ctx.stroke();
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 12px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText(p.label, p.x, p.y + 4);
+        });
+
+        // UI Header
+        ctx.textAlign = "left";
+        ctx.fillStyle = "#64748b";
+        ctx.font = "bold 16px Courier New";
+        ctx.fillText(`TIME: ${secondsElapsed}s`, 20, 30);
+        ctx.fillText(`WAVE: ${waveCount}`, 160, 30);
+        ctx.fillText(`SCORE: ${score}`, canvas.width - 150, 30);
+
+        if (gameOver) {
+            ctx.fillStyle = "rgba(0,0,0,0.85)";
+            ctx.fillRect(0,0, canvas.width, canvas.height);
+            ctx.fillStyle = "#f43f5e";
+            ctx.font = "bold 50px Arial";
+            ctx.textAlign = "center";
+            ctx.fillText("CRUSHED!", canvas.width/2, canvas.height/2);
+            ctx.font = "20px Arial";
+            ctx.fillStyle = "white";
+            ctx.fillText(`Waves Cleared: ${waveCount-1} | Score: ${score}`, canvas.width/2, canvas.height/2 + 50);
+            ctx.font = "14px Arial";
+            ctx.fillText("Refresh to Restart", canvas.width/2, canvas.height/2 + 90);
+        }
+    }
+
+    function gameLoop(time) {
+        update(time);
+        draw();
+        requestAnimationFrame(gameLoop);
+    }
+
+    initBricks();
+    requestAnimationFrame(gameLoop);
+</script>
+</body>
+</html>

@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Logic Survival: Master the Gates</title>
+    <style>
+        :root { 
+            --bg: #0f172a; --panel: #1e293b; --accent: #38bdf8; 
+            --success: #22c55e; --warning: #ef4444; --skip: #94a3b8; 
+        }
+
+        /* Theme Variants */
+        body.theme-matrix { --bg: #050505; --panel: #0a0a0a; --accent: #00ff41; --success: #00ff41; --warning: #ff0000; }
+        body.theme-cyberpunk { --bg: #2d004d; --panel: #1a0033; --accent: #ff00ff; --success: #00ffff; --warning: #ffde00; }
+
+        body { font-family: 'Segoe UI', Tahoma, sans-serif; background: var(--bg); color: white; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; margin: 0; overflow: hidden; transition: background 0.5s ease; }
+        
+        /* Theme Selector UI */
+        .theme-selector { position: absolute; top: 20px; right: 20px; z-index: 1001; background: var(--panel); padding: 10px; border-radius: 8px; border: 1px solid var(--accent); }
+        .theme-selector select { background: transparent; color: white; border: none; font-family: inherit; cursor: pointer; outline: none; }
+
+        /* Stats Header */
+        .stats-bar { display: flex; justify-content: space-between; width: 450px; margin-bottom: 10px; font-weight: bold; font-size: 1.1rem; }
+        .score-box { color: var(--success); }
+        .timer-box { color: var(--accent); transition: 0.3s; }
+        
+        /* Main Game Box */
+        .game-box { background: var(--panel); padding: 2rem; border-radius: 1rem; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.5); text-align: center; width: 500px; border: 1px solid var(--accent); position: relative; z-index: 1; }
+        
+        /* Formula Display for Dual Layout */
+        .formula-display { background: #000; padding: 15px; border-radius: 8px; font-family: 'Courier New', monospace; color: var(--accent); margin: 20px 0; border: 1px solid var(--accent); min-height: 4rem; display: flex; flex-direction: column; justify-content: center; gap: 8px; }
+        .text-row { font-size: 1.1rem; opacity: 0.9; }
+        .symbol-row { font-size: 1.4rem; font-weight: bold; color: #fff; text-shadow: 0 0 10px var(--accent); }
+        
+        /* Input Switches */
+        .controls { display: flex; justify-content: space-around; margin: 25px 0; }
+        .sw-btn { width: 65px; height: 65px; border-radius: 12px; border: 3px solid #475569; background: #1e293b; color: white; font-size: 1.1rem; cursor: pointer; transition: 0.2s; }
+        .sw-btn.active { border-color: var(--accent); background: #334155; box-shadow: 0 0 15px rgba(56, 189, 248, 0.4); }
+        
+        /* Status Light */
+        .light { width: 50px; height: 50px; background: #334155; border-radius: 50%; margin: 10px auto; transition: 0.3s; opacity: 0.3; }
+        .light.active { background: #fbbf24; box-shadow: 0 0 30px #fbbf24; opacity: 1; }
+        
+        /* Action Buttons */
+        .action-group { display: flex; gap: 10px; margin-top: 10px; }
+        #submit-btn { flex: 3; background: var(--success); border: none; padding: 15px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #000; font-size: 1.1rem; }
+        #skip-btn { flex: 1; background: var(--skip); border: none; padding: 15px; border-radius: 6px; cursor: pointer; font-weight: bold; color: #1e293b; font-size: 0.9rem; }
+        
+        /* Overlays */
+        #game-over-overlay, #instruction-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(15, 23, 42, 0.95);
+            display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 999; backdrop-filter: blur(8px);
+        }
+        
+        #instruction-overlay { display: flex; z-index: 1000; background: var(--bg); }
+        .instruction-card { background: var(--panel); padding: 2rem; border-radius: 1rem; border: 1px solid var(--accent); max-width: 420px; text-align: center; }
+        .instruction-card h2 { color: var(--accent); margin: 0 0 10px 0; }
+        .instruction-card ul { text-align: left; margin: 15px 0; line-height: 1.6; color: #cbd5e1; list-style: none; padding: 0; }
+        .instruction-card li { margin-bottom: 8px; }
+        
+        #start-btn { background: var(--accent); color: #000; border: none; padding: 12px 30px; border-radius: 6px; font-weight: bold; cursor: pointer; font-size: 1.1rem; width: 100%; }
+
+        .final-score { font-size: 5rem; color: var(--accent); margin: 10px 0; font-weight: bold; }
+        .restart-hint { color: #94a3b8; margin-top: 30px; font-size: 1rem; animation: blink 1.5s infinite; visibility: hidden; }
+        @keyframes blink { 50% { opacity: 0.2; } }
+    </style>
+</head>
+<body id="game-body">
+
+    <div class="theme-selector">
+        <select id="theme-pick" onchange="changeTheme(this.value)">
+            <option value="default">🌌 Midnight</option>
+            <option value="matrix">📟 Matrix</option>
+            <option value="cyberpunk">🌃 Cyberpunk</option>
+        </select>
+    </div>
+
+    <div id="instruction-overlay">
+        <div class="instruction-card">
+            <h2>SYSTEM READY</h2>
+            <p style="color: #94a3b8;">Solve the dual logic gates to survive.</p>
+            <ul>
+                <li>✅ <b>AND (&and;):</b> Both must be 1.</li>
+                <li>➕ <b>OR (&or;):</b> One or both must be 1.</li>
+                <li>🚫 <b>NOT (&not;):</b> Reverses the input.</li>
+                <li>🎯 <b>GOAL:</b> Make the total result <b>1</b>.</li>
+            </ul>
+            <button id="start-btn" onclick="startGame()">START SYSTEM</button>
+        </div>
+    </div>
+
+    <div class="stats-bar">
+        <div class="score-box">SCORE: <span id="score-val">0</span></div>
+        <div class="timer-box" id="timer-display">TIME: 25s</div>
+    </div>
+
+    <div class="game-box">
+        <h2 style="margin:0 0 10px 0">LOGIC SURVIVAL</h2>
+        <div class="formula-display" id="formula-text">
+            <div class="text-row" id="formula-plain">Initializing...</div>
+            <div class="symbol-row" id="formula-sym">...</div>
+        </div>
+
+        <div class="controls">
+            <button id="btn-A" class="sw-btn" onclick="toggle('A')">A<br>0</button>
+            <button id="btn-B" class="sw-btn" onclick="toggle('B')">B<br>0</button>
+            <button id="btn-C" class="sw-btn" onclick="toggle('C')">C<br>0</button>
+        </div>
+
+        <div id="light-bulb" class="light"></div>
+        <div id="msg" style="height: 30px; margin-bottom: 5px; font-weight: bold;"></div>
+        
+        <div class="action-group">
+            <button id="submit-btn" onclick="checkAnswer()">SUBMIT</button>
+            <button id="skip-btn" onclick="skipLevel()">SKIP (-1s)</button>
+        </div>
+    </div>
+
+    <div id="game-over-overlay" onclick="retry()">
+        <h1 style="color:var(--warning); font-size: 3rem; margin-bottom: 0;">TERMINATED</h1>
+        <p style="margin-top: 10px;">FINAL SCORE</p>
+        <div class="final-score" id="final-score-val">0</div>
+        <p id="data-log" style="font-size:0.8rem; color:#64748b; font-family: monospace;"></p>
+        <div class="restart-hint" id="restart-hint">TAP TO REBOOT</div>
+    </div>
+
+    <script>
+        let state = { A: 0, B: 0, C: 0 };
+        let score = 0;
+        let timeLeft = 25;
+        let timerInterval = null;
+        let currentFunc = null;
+        let gameActive = false;
+        let canRestart = false;
+
+        function changeTheme(theme) {
+            const body = document.getElementById('game-body');
+            body.className = ''; // Reset
+            if (theme === 'matrix') body.classList.add('theme-matrix');
+            if (theme === 'cyberpunk') body.classList.add('theme-cyberpunk');
+        }
+
+        function startGame() {
+            document.getElementById('instruction-overlay').style.display = 'none';
+            gameActive = true;
+            generateLevel();
+            startTimer();
+        }
+
+        function startTimer() {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
+                if (!gameActive) return;
+                timeLeft--;
+                const el = document.getElementById('timer-display');
+                el.textContent = `TIME: ${timeLeft}s`;
+                el.style.color = timeLeft <= 5 ? "var(--warning)" : "var(--accent)";
+                if (timeLeft <= 0) endGame();
+            }, 1000);
+        }
+
+        function generateLevel() {
+            const ops = ["&&", "||"];
+            const vars = ["A", "B", "C"];
+            vars.sort(() => Math.random() - 0.5);
+
+            const op1 = ops[Math.floor(Math.random() * ops.length)];
+            const op2 = ops[Math.floor(Math.random() * ops.length)];
+            const useNot = Math.random() > 0.4 ? "!" : "";
+            
+            const formulaStr = `(${vars[0]} ${op1} ${vars[1]}) ${op2} ${useNot}${vars[2]}`;
+            currentFunc = new Function('A', 'B', 'C', `return ${formulaStr} ? 1 : 0;`);
+            
+            const plain = formulaStr
+                .replace(/&&/g, ' AND ')
+                .replace(/\|\|/g, ' OR ')
+                .replace(/!/g, 'NOT ');
+
+            const sym = formulaStr
+                .replace(/&&/g, ' ∧ ')
+                .replace(/\|\|/g, ' ∨ ')
+                .replace(/!/g, ' ¬');
+            
+            document.getElementById('formula-plain').textContent = plain;
+            document.getElementById('formula-sym').textContent = `(${sym})`;
+            resetSwitches();
+        }
+
+        function toggle(key) {
+            if (!gameActive) return;
+            state[key] = state[key] === 0 ? 1 : 0;
+            const btn = document.getElementById('btn-' + key);
+            btn.innerHTML = `${key}<br>${state[key]}`;
+            btn.classList.toggle('active');
+        }
+
+        function checkAnswer() {
+            if (!gameActive) return;
+            const isCorrect = currentFunc(state.A, state.B, state.C);
+            const msg = document.getElementById('msg');
+            const bulb = document.getElementById('light-bulb');
+
+            if (isCorrect === 1) {
+                score += 10;
+                timeLeft += 3;
+                document.getElementById('score-val').textContent = score;
+                bulb.className = 'light active';
+                msg.textContent = "ACCESS GRANTED (+3s)";
+                msg.style.color = "var(--success)";
+                gameActive = false;
+                setTimeout(() => { gameActive = true; generateLevel(); }, 1000);
+            } else {
+                timeLeft = Math.max(0, timeLeft - 5);
+                msg.textContent = "LOGIC ERROR (-5s)";
+                msg.style.color = "var(--warning)";
+                bulb.className = 'light';
+            }
+        }
+
+        function skipLevel() {
+            if (gameActive && timeLeft > 1) {
+                timeLeft -= 1;
+                generateLevel();
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(timerInterval);
+            document.getElementById('game-over-overlay').style.display = 'flex';
+            document.getElementById('final-score-val').textContent = score;
+            setTimeout(() => { 
+                canRestart = true; 
+                document.getElementById('restart-hint').style.visibility = 'visible';
+            }, 2000);
+        }
+
+        function retry() { if (canRestart) location.reload(); }
+
+        function resetSwitches() {
+            state = { A: 0, B: 0, C: 0 };
+            ["A", "B", "C"].forEach(v => {
+                const btn = document.getElementById('btn-' + v);
+                btn.innerHTML = `${v}<br>0`;
+                btn.classList.remove('active');
+            });
+            document.getElementById('light-bulb').className = 'light';
+            document.getElementById('msg').textContent = "";
+        }
+    </script>
+</body>
+</html>
